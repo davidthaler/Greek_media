@@ -1,3 +1,12 @@
+"""
+The functions in this module compute the mean F1-score evaluation metric,
+perform cross-validation, grid search and make predictions from inside a
+cross-validation loop for model stacking.
+
+project: Kaggle WISE 2014 Greek Media competition
+author: David Thaler
+"""
+
 import numpy as np
 import pandas as pd
 from sklearn.cross_validation import cross_val_score as cvs
@@ -6,6 +15,11 @@ from sklearn.metrics import f1_score
 from sklearn.utils import safe_asarray
 import models
 
+# TODO: Figure out if sklearn f1-score was used...
+#       Did we have to do reimplement F1?
+# TODO: explain in file comment why we re-implemented 
+#        grid search and cross-validation
+# TODO: decide whether dead code (next 2 functions) is in, out, or moved
 
 def dvByLabel(y, dv):
   dv = safe_asarray(dv)
@@ -35,6 +49,12 @@ def getScoreFrame(y, pred):
 
 
 def grid(model, x, y, cvals, t1vals, t2vals, k=3):
+  """
+  Performs grid search for hyperparameters used in the uniformOVA model.
+  
+  Params:
+    model - 
+  """
   result = []
   for c in cvals:
     model.c = c
@@ -86,8 +106,9 @@ def meanF1list(gold, pred):
   return np.mean(row_f1)
   
 
-# Use this one, pass it as 'scoring' to cross_val_score
 def meanF1scorer(model, x, y):
+  """
+  """
   pred = model.predict(x)
   if type(y) is list:
     return meanF1list(y, pred)
