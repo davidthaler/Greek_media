@@ -15,8 +15,6 @@ from sklearn.metrics import f1_score
 from sklearn.utils import as_float_array
 import models
 
-# TODO: explain in file comment why we re-implemented 
-#        grid search and cross-validation
 
 def dvByLabel(y, dv):
   """
@@ -79,7 +77,8 @@ def grid(model, x, y, cvals, t1vals, t2vals, k=3):
   NB: This was re-implemented (vs. using grid search from sklearn) because
   sklearn grid search would try every (C, t1, t2) tuple, which would retrain
   the SVC with the same C value t1 x t2 times. This trains the SVC once, 
-  and then searches over the (t1, t2) 2-tuples.
+  and then searches over the (t1, t2) 2-tuples, which is a fast thresholding
+  operation.
   
   Params:
     model - a model that has parameter C, t1 and t2
@@ -147,24 +146,24 @@ def cvk(model, x, y, k=3):
   return cvs(model, x, y, scoring=meanF1scorer, cv=k, n_jobs=3)
 
 
-def meanF1array(gold, pred):
-  row_f1 = np.zeros((gold.shape[0]))
-  for k in range(gold.shape[0]):
-    tp = (pred[k] * gold[k]).sum()
-    fp = (pred[k] > gold[k]).sum()
-    fn = (pred[k] < gold[k]).sum()
-    precision = tp/(tp + fp + 1e-9)
-    recall = tp/(tp + fn + 1e-9)
-    row_f1[k] = 2 * precision * recall / (precision + recall + 1e-9)
-  return np.mean(row_f1)
-
-
-def meanF1list(gold, pred):
-  row_f1 = np.zeros(len(gold))
-  for k in range(len(gold)):
-    tp = len(np.intersect1d(gold[k], pred[k]))
-    fp = len(np.setdiff1d(pred[k], gold[k]))
-    fn = len(np.setdiff1d(gold[k], pred[k])) 
+def meanF1array(y, pred):
+  """
+  Function for computing mean F1-score given ground truth labels
+  and a same-sized numpy array of 0-1 predictions.
+  
+  Params:
+    y - 0-1 array of ground truth labels
+        a numpy array of size (# instances) x (# classes)
+    pred - 0-1 array of predictions of same size as y
+    
+  Returns:
+    mean F1-score for the predictions, pred given the labels, y
+  """
+  row_f1 = np.zeros((y.shape[0]))
+  for k in range(y.shape[0]):
+    tp = (pred[k] * y[k]).sum()
+    fp = (pred[k] > y[k]).sum()
+    fn = (pred[k] < y[k]).sum()
     precision = tp/(tp + fp + 1e-9)
     recall = tp/(tp + fn + 1e-9)
     row_f1[k] = 2 * precision * recall / (precision + recall + 1e-9)
@@ -186,10 +185,7 @@ def meanF1scorer(model, x, y):
     the mean F1-score for the predictions on x
   """
   pred = model.predict(x)
-  if type(y) is list:
-    return meanF1list(y, pred)
-  else:
-    return meanF1array(y, pred)
+  return meanF1array(y, pred)
 
 
 
