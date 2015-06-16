@@ -1,3 +1,11 @@
+"""
+This module contains all of the models used in the Greek Media topic
+classification competition on Kaggle.
+
+project: Kaggle WISE 2014 Greek Media competition
+author: David Thaler
+"""
+
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.svm import LinearSVC
