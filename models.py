@@ -17,6 +17,14 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import f1_score
 import pdb
 
+# TODO: investigate model with penalty='l1', dual=False...
+#       Nagadomi liked it, and it was better at defaults than this.
+# TODO: investigate not retraining stack models, that was better in Avito
+# TODO: remove StackModel2, not used in final entries
+# TODO: remove splitOVA, not used in final entries
+# TOOD: remove repredict2, not used
+# TODO: rename Stack3 to just Stack
+# TODO: extract a PredictMixin to factor out common code
 
 class LinearStackModel(BaseEstimator):
 
@@ -86,18 +94,6 @@ class LinearStackModel(BaseEstimator):
     return repredict(self.dv, t1, t2)
     
     
-#Not instance methods
-def getRowDV(dv):
-  rowmax = dv.max(1)
-  row_dv = (dv.transpose() - rowmax).transpose()
-  return row_dv
-  
-def pairFeatures(y, cutoff):
-  pairs = [(j,k) for j in range(y.shape[1]) for k in range(y.shape[1]) if j < k]
-  f = [(y[:, j]*y[:, k]) for j,k in pairs if (y[:, j] * y[:, k]).sum() >= cutoff]
-  return np.array(f).transpose()
-
-
 class RidgePCA(BaseEstimator):
 
   def __init__(self, c=1, n_components=100, t1=0, t2=0):
@@ -326,44 +322,7 @@ class thresholdOVA(BaseEstimator):
   def predict(self, x):
     dv = self.decision_function(x)
     return repredict(dv, self.thr, self.t2)
-    
-
-def repredict(dv, t1, t2):
-  """
-  Takes decision values and returns predictions, given a threshold.
   
-  Args:
-    dv - 2d array of decision values
-    t1 - either a scalar threshold, or a vector of length(dv.shape[1])
-         all dvs > t1 are positive
-    t2 - all dvs >= row_max - t2 are positive
-    
-  Returns:
-    predictions (0-1) from these dvs with the given threshold.
-  """
-  pred = ((dv - t1) > 0).astype(float)
-  max_dv = dv.max(1)
-  for k in range(pred.shape[0]):
-    cut = max_dv[k] - t2
-    idx = (dv[k, :] >= cut) 
-    pred[k, idx] = 1
-  return pred
-
-
-def cvdv(model, x, y, k=3, use_predict=False):
-  """
-  Get dvs for all of x by training on k folds, predicting on 1,
-  and aggregating the predictions into an object the same shape as y.
-  """
-  folds = KFold(y.shape[0], k)
-  dv = 0*y
-  for train, val in folds:
-    model.fit(x[train], y[train])
-    if use_predict:
-      dv[val] = model.predict(x[val])
-    else:
-      dv[val] = model.decision_function(x[val])
-  return dv
 
 class SplitOVA(BaseEstimator):
 
@@ -404,19 +363,6 @@ class SplitOVA(BaseEstimator):
     for k in range(len(self.models)):
       dvs[:, k] = self.models[k].decision_function(x)
     return dvs
-  
-def repredict2(dv, t_lo, t_hi, t_max, cut, ysum):
-  pred = 0 * dv
-  lo_idx = (ysum < cut)
-  hi_idx = (ysum >= cut)
-  pred[:, lo_idx] = (dv[:, lo_idx] >= t_lo).astype(float)
-  pred[:, hi_idx] = (dv[:, hi_idx] >= t_hi).astype(float)
-  max_dv = dv.max(1)
-  for k in range(pred.shape[0]):
-    max_cut = max_dv[k] - t_max
-    idx = (dv[k, :] >= max_cut) 
-    pred[k, idx] = 1
-  return pred
   
   
 class StackModel3(BaseEstimator):
@@ -525,5 +471,49 @@ class StackModel3(BaseEstimator):
                           cts.ravel()) )
     return f
   
+
+def getRowDV(dv):
+  rowmax = dv.max(1)
+  row_dv = (dv.transpose() - rowmax).transpose()
+  return row_dv
   
+def cvdv(model, x, y, k=3, use_predict=False):
+  """
+  Get dvs for all of x by training on k folds, predicting on 1,
+  and aggregating the predictions into an object the same shape as y.
+  """
+  folds = KFold(y.shape[0], k)
+  dv = 0*y
+  for train, val in folds:
+    model.fit(x[train], y[train])
+    if use_predict:
+      dv[val] = model.predict(x[val])
+    else:
+      dv[val] = model.decision_function(x[val])
+  return dv
+
+
+def repredict(dv, t1, t2):
+  """
+  Takes decision values and returns predictions, given a threshold.
   
+  Args:
+    dv - 2d array of decision values
+    t1 - either a scalar threshold, or a vector of length(dv.shape[1])
+         all dvs > t1 are positive
+    t2 - all dvs >= row_max - t2 are positive
+    
+  Returns:
+    predictions (0-1) from these dvs with the given threshold.
+  """
+  pred = ((dv - t1) > 0).astype(float)
+  max_dv = dv.max(1)
+  for k in range(pred.shape[0]):
+    cut = max_dv[k] - t2
+    idx = (dv[k, :] >= cut) 
+    pred[k, idx] = 1
+  return pred
+  
+
+
+
