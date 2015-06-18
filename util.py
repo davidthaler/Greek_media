@@ -14,7 +14,6 @@ import re
 from sklearn.datasets import load_svmlight_file
 import pdb
 
-# TODO: finish function comments
 
 BASE = '../'
 DATA = BASE + 'data/'
