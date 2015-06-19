@@ -17,11 +17,13 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import f1_score
 import pdb
 
+# TODO: document all classes/methods/functions
+# TODO: refactor/cleanup ThresholdOVA...its ugly.
 # TODO: investigate model with penalty='l1', dual=False...
 #       Nagadomi liked it, and it was better at defaults than this.
 # TODO: investigate not retraining stack model components, that was better in Avito
-# TODO: document all classes/methods/functions
-    
+
+
 class RidgePCA(BaseEstimator):
   '''
   RidgePCA fits a ridge regression to 'topics' exacted 
@@ -37,9 +39,9 @@ class RidgePCA(BaseEstimator):
           Usually called lambda, calling it 'c' lets us use eval.grid.
       n_components - the # of components to use in the representation 
           of the multilabel y matrix. This is like an LSA topic count.
-    t1 - either a scalar threshold, or a vector of length 
+      t1 - either a scalar threshold, or a vector of length 
          (# of classes); all predictions > t1 are positive
-    t2 - a scalar threshold for closeness to the maximum row value
+      t2 - a scalar threshold for closeness to the maximum row value
          Predictions >= row_max - t2 are positive.
          
     Returns: nothing
@@ -92,7 +94,7 @@ class RidgePCA(BaseEstimator):
     dv = self.decision_function(x)
     return repredict(dv, self.t1, self.t2)
     
-    
+
 class UniformOVA(BaseEstimator):
   '''
   UniformOVA estimator fits a linear SVC model for each class that has
@@ -101,7 +103,8 @@ class UniformOVA(BaseEstimator):
   one threshold or within a second threshold of the highest value 
   for that instance.
   '''
-  
+
+  # NB: best known values are c=1 (default), t1=-0.3, t2=0.1
   def __init__(self, c=1, t1=0, t2=0, null_dv=-99):
     '''
     Constructor for UniformOVA model. Just stores field values.
@@ -126,8 +129,8 @@ class UniformOVA(BaseEstimator):
     Fit the UniformOVA model.
     
     Params:
-      x - input features, not used
-      y - 0-1 label matrix, not used
+      x - input features
+      y - 0-1 label matrix
   
     Returns:
       nothing, but model is fitted.
@@ -234,9 +237,29 @@ class NullModel(BaseEstimator):
     return self.null_dv * np.ones(x.shape[0])
 
 
-class thresholdOVA(BaseEstimator):
-
+class ThresholdOVA(BaseEstimator):
+  '''
+  ThresholdOVA uses a UniformOVA model, but chooses a per-class threshold
+  on the decision values for predicting class membership. These per-class
+  thresholds are found on a set of cross-validation predictions. The
+  per-class threshold adjustment is only sought for the top k classes.
+  '''
+  
   def __init__(self, c=1, t1=0, t2=0, tstep=0.1, k=10):
+    '''
+    Constructor for ThresholdOVA model. Just stores field values.
+    
+    Params:
+      c - L2 loss parameter for the SVC's
+      t1 - either a scalar threshold, or a vector of length(dv.shape[1])
+         all instances with dvs > t1 are positive
+      t2 - all instances with dvs >= row_max - t2 are positive
+      tstep - the thresholds tried are t1 +- tstep and 2*tstep
+      k - thresholds are adjusted for the most-frequent k classes 
+      
+    Returns:
+      nothing
+    '''
     self.c = c
     self.t1 = t1
     self.t2 = t2
@@ -244,13 +267,32 @@ class thresholdOVA(BaseEstimator):
     self.k = k
     
   def fit(self, x, y):
+    '''
+    Fit the ThresholdOVA model.
+    
+    Params:
+      x - input features
+      y - 0-1 label matrix
+  
+    Returns:
+      nothing, but model is fitted.
+    '''
     self.model = UniformOVA(c=self.c)
     dv = cvdv(self.model, x, y)
     self.dv = dv
     self.fit_thr(y)
     self.model.fit(x,y)
   
-  def fit_thr(self, y): 
+  def fit_thr(self, y):
+    '''
+    Fits per-class thresholds for the top self.k classes.
+    
+    Params:
+      y - 0-1 label matrix
+  
+    Returns:
+      nothing, but thresholds for the top self.k classes are adjusted.
+    '''
     dv = self.dv
     ysum = np.array(y.sum(0))
     self.thr = self.t1 * np.ones(len(ysum))
@@ -258,6 +300,9 @@ class thresholdOVA(BaseEstimator):
     idx = idx[::-1]
     idx = idx[:self.k]
     for i in idx:
+    
+      # TODO: replace this with a loop over 5 values
+    
       pred = repredict(dv, self.thr, self.t2)
       f1_0 = f1_score(y, pred, average='samples')
       
@@ -281,6 +326,8 @@ class thresholdOVA(BaseEstimator):
       pred = repredict(dv, thr_minus2, self.t2)
       f1_minus2 = f1_score(y, pred, average='samples')
       
+      # TODO: replace with argmax and indexing into the 5 values above
+      
       max_f1 = max([f1_0, f1_plus, f1_plus2, f1_minus, f1_minus2])
       if (max_f1 == f1_plus):
         self.thr[i] = self.thr[i] + self.tstep
@@ -292,15 +339,36 @@ class thresholdOVA(BaseEstimator):
         self.thr[i] = self.thr[i] - 2*self.tstep
     
   def decision_function(self, x):
+    '''
+    Finds the decision value for each instance under each per-class model.
+    
+    Params:
+      x - input features, not used
+    
+    Returns:
+      a real-valued matrix of dimension (# instances) x (# classes)
+    '''
     return self.model.decision_function(x)
     
   def predict(self, x):
+    '''
+    Computes a 0-1 matrix of predicted labels for each instance.
+    
+    Params:
+      x - input features
+    
+    Returns:
+      A 0-1 matrix of predicted labels.
+    '''
     dv = self.decision_function(x)
     return repredict(dv, self.thr, self.t2)
   
   
 class StackModel(BaseEstimator):
-
+  '''
+  StackModel
+  '''
+  
   def __init__(self, 
                c=1, 
                t1=2, 
@@ -356,6 +424,15 @@ class StackModel(BaseEstimator):
     self.model0.fit(x,y)
     
   def predict(self, x):
+    '''
+    Computes a 0-1 matrix of predicted labels for each instance.
+    
+    Params:
+      x - input features
+    
+    Returns:
+      A 0-1 matrix of predicted labels.
+    '''
     dvs = self.decision_function(x)
     pred = (dvs > self.t1).astype(float)
     max_dv = dvs.max(1)
@@ -366,13 +443,21 @@ class StackModel(BaseEstimator):
     return pred
     
   def decision_function(self, x):
+    '''
+    Finds the decision value for each instance under each per-class model.
+    
+    Params:
+      x - input features, not used
+    
+    Returns:
+      a real-valued matrix of dimension (# instances) x (# classes)
+    '''
     dv0 = self.model0.decision_function(x)
     dv1 = self.model1.decision_function(x)
     f = self.dv2f(dv1, dv0, x)
     dv2 = self.model2.decision_function(f)
     dv2 = dv2.reshape( (x.shape[0], len(self.yrate) ) )
     return dv2
-    
 
   def dv2ftr(self, dv, dv0, x, y):
     f = self.dv2f(dv, dv0, x)
