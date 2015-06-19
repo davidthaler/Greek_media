@@ -14,8 +14,8 @@ import re
 from sklearn.datasets import load_svmlight_file
 import pdb
 
-
-BASE = '../'
+# abs. path to project top-level directory
+BASE = '/Users/davidthaler/Documents/Kaggle/GreekMedia/'
 DATA = BASE + 'data/'
 SUBMIT = BASE + 'submissions/'
 SAMPLE =  DATA + 'sampleSubmission.csv'
