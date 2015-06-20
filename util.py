@@ -11,18 +11,19 @@ import pandas as pd
 import gzip
 import cPickle
 import re
+import os.path
 from sklearn.datasets import load_svmlight_file
 import pdb
 
-# abs. path to project top-level directory
-BASE = '/Users/davidthaler/Documents/Kaggle/GreekMedia/'
-DATA = BASE + 'data/'
-SUBMIT = BASE + 'submissions/'
-SAMPLE =  DATA + 'sampleSubmission.csv'
-SUBMISSION_PATH = SUBMIT + 'submission%d.csv.gz'
-XTEST = DATA + 'xtest.pkl.gz'
-XTRAIN = DATA + 'xtrain.pkl.gz'
-YTRAIN = DATA + 'ytrain.pkl.gz'
+
+BASE = os.path.expanduser('~/Documents/Kaggle/GreekMedia/')
+DATA = os.path.join(BASE, 'data')
+SUBMIT = os.path.join(BASE, 'submissions')
+SAMPLE =  os.path.join(DATA, 'sampleSubmission.csv')
+SUBMISSION_PATH = os.path.join(SUBMIT, 'submission%d.csv.gz')
+XTEST = os.path.join(DATA, 'xtest.pkl.gz')
+XTRAIN = os.path.join(DATA, 'xtrain.pkl.gz')
+YTRAIN = os.path.join(DATA, 'ytrain.pkl.gz')
 NROW_TRAIN = 64857
 NLABELS = 203
 NFEATURES= 301561
@@ -39,7 +40,7 @@ def rewrite_train():
   Returns: 
     nothing, but writes out the transformed input files at data/
   """
-  inpath = DATA + 'train.libsvm'
+  inpath = os.path.join(DATA, 'train.libsvm')
   (x, ylist) = load_svmlight_file(inpath, 
                                   n_features=NFEATURES, 
                                   multilabel=True, 
@@ -81,7 +82,7 @@ def rewrite_test():
   Returns: 
     nothing, but writes out the transformed input files at data/
   """
-  inpath = DATA + 'test.libsvm'
+  inpath = os.path.join(DATA, 'test.libsvm')
   (x, y) = load_svmlight_file(inpath, n_features=NFEATURES, zero_based=False)
   with gzip.open(XTEST, 'wb') as f:
     cPickle.dump(x, f)
@@ -120,6 +121,8 @@ def loadTest():
 def writeSubmission(submit_num, pred):
   """
   Writes out the predictions in the correct form for submission to Kaggle.
+
+  NB: This code is pretty slow (~ 15min).
   
   Params:
     submit_num - the submission is named submission<submit_num>.csv.gz
