@@ -182,7 +182,8 @@ class NullModel(BaseEstimator):
   NullModel returns a decision value that results in a negative prediction.
   It is used for the 3 classes that do not appear in the training data.
   This model allows us to just keep a list of models for all of the classes.
-  Normal models can't be fitted on classes with only one label.
+  Normal models can't be fitted on classes with only one label. Unlike the 
+  other models, NullModel is for only one class.
   '''
   
   def __init__  (self, null_dv=-99):
@@ -202,7 +203,7 @@ class NullModel(BaseEstimator):
     
     Params:
       x - input features, not used
-      y - 0-1 label matrix, not used
+      y - 0-1 label vector
     
     Returns: nothing
     '''
