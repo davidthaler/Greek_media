@@ -17,12 +17,6 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import f1_score
 import pdb
 
-# TODO: document all classes/methods/functions
-# TODO: refactor/cleanup ThresholdOVA...its ugly.
-# TODO: investigate model with penalty='l1', dual=False...
-#       Nagadomi liked it, and it was better at defaults than this.
-# TODO: investigate not retraining stack model components, that was better in Avito
-
 
 class RidgePCA(BaseEstimator):
   '''
@@ -44,7 +38,8 @@ class RidgePCA(BaseEstimator):
       t2 - a scalar threshold for closeness to the maximum row value
          Predictions >= row_max - t2 are positive.
          
-    Returns: nothing
+    Returns: 
+      an initialized RidgePCA model
     '''
     self.c = c
     self.n_components = n_components
@@ -117,7 +112,7 @@ class UniformOVA(BaseEstimator):
       null_dv - the decision value for classes with no positive instances.
       
     Returns:
-      nothing
+      an initialized UniformOVA model
     '''
     self.t1 = t1
     self.t2 = t2
@@ -196,7 +191,8 @@ class NullModel(BaseEstimator):
     
     Params:
       null_dv - the decision value to return
-    Returns: nothing
+      
+    Returns: a NullModel
     '''
     self.null_dv = null_dv
     
@@ -258,7 +254,7 @@ class ThresholdOVA(BaseEstimator):
       k - thresholds are adjusted for the most-frequent k classes 
       
     Returns:
-      nothing
+      an initialized ThresholdOVA model
     '''
     self.c = c
     self.t1 = t1
@@ -293,51 +289,22 @@ class ThresholdOVA(BaseEstimator):
     Returns:
       nothing, but thresholds for the top self.k classes are adjusted.
     '''
-    dv = self.dv
     ysum = np.array(y.sum(0))
     self.thr = self.t1 * np.ones(len(ysum))
     idx = np.argsort(ysum)
     idx = idx[::-1]
     idx = idx[:self.k]
+    steps = self.tstep * np.array([-2., -1., 0., 1., 2.])
     for i in idx:
-    
-      # TODO: replace this with a loop over 5 values
-    
-      pred = repredict(dv, self.thr, self.t2)
-      f1_0 = f1_score(y, pred, average='samples')
-      
-      thr_plus = self.thr.copy()
-      thr_plus[i] = thr_plus[i] + self.tstep
-      pred = repredict(dv, thr_plus, self.t2)
-      f1_plus = f1_score(y, pred, average='samples')
-      
-      thr_plus2 = self.thr.copy()
-      thr_plus2[i] = thr_plus2[i] + 2*self.tstep
-      pred = repredict(dv, thr_plus2, self.t2)
-      f1_plus2 = f1_score(y, pred, average='samples')
-      
-      thr_minus = self.thr.copy()
-      thr_minus[i] = thr_minus[i] - self.tstep
-      pred = repredict(dv, thr_minus, self.t2)
-      f1_minus = f1_score(y, pred, average='samples')
-      
-      thr_minus2 = self.thr.copy()
-      thr_minus2[i] = thr_minus2[i] - 2*self.tstep
-      pred = repredict(dv, thr_minus2, self.t2)
-      f1_minus2 = f1_score(y, pred, average='samples')
-      
-      # TODO: replace with argmax and indexing into the 5 values above
-      
-      max_f1 = max([f1_0, f1_plus, f1_plus2, f1_minus, f1_minus2])
-      if (max_f1 == f1_plus):
-        self.thr[i] = self.thr[i] + self.tstep
-      elif (max_f1 == f1_plus2):
-        self.thr[i] = self.thr[i] + 2*self.tstep
-      elif (max_f1 == f1_minus):
-        self.thr[i] = self.thr[i] - self.tstep
-      elif (max_f1 == f1_minus2):
-        self.thr[i] = self.thr[i] - 2*self.tstep
-    
+      f1s = np.zeros(len(steps))
+      for (k, step) in enumerate(steps):
+        thr = self.thr.copy()
+        thr[i] += step
+        pred = repredict(self.dv, thr, self.t2)
+        f1s[k] = f1_score(y, pred, average='samples')
+      best_idx = np.argmax(f1s)
+      self.thr[i] += steps[best_idx]
+
   def decision_function(self, x):
     '''
     Finds the decision value for each instance under each per-class model.
@@ -366,7 +333,12 @@ class ThresholdOVA(BaseEstimator):
   
 class StackModel(BaseEstimator):
   '''
-  StackModel
+  StackModel trains a gradient boosting classifier (GBC) on features made by
+  training other models inside of cross-validation loops and predicting 
+  on the held-out fold. The predictions are the aggregated into a feature
+  matrix with the same number of rows as the data. The first level models are 
+  the UniformOVA model, the RidgePCA model, and a regular ridge regression 
+  trained on the count of positive labels per row.
   '''
   
   def __init__(self, 
@@ -377,6 +349,25 @@ class StackModel(BaseEstimator):
                max_depth=2,
                n_stack = 3000,
                folds=3):
+    '''
+    Constructor for StackModel. This only stores field values.
+    
+    Params:
+      c - L2 loss parameter for the SVC's
+      t1 - either a scalar threshold, or a vector of length(dv.shape[1])
+         all instances with dvs > t1 are positive
+      t2 - all instances with dvs >= row_max - t2 are positive
+      n_estimators - # of trees used in GBC
+      max_depth - max depth of trees in GBC
+      n_stack - # examples used to train the StackModel. These are
+           individual predictions for an (instance, class) 2-tuple, that
+           is, for a single element in the label matrix, y
+      folds - # of folds used in the CV-loops used to generate the features
+           for the StackModel's GBC
+          
+    Returns: 
+      an initialized StackModel
+    '''
     self.c = c
     self.t1 = t1
     self.t2 = t2
@@ -386,6 +377,16 @@ class StackModel(BaseEstimator):
     self.folds = folds
     
   def fit(self, x, y):
+    '''
+    Fit the StackModel.
+    
+    Params:
+      x - input features
+      y - 0-1 label matrix
+  
+    Returns:
+      nothing, but model is fitted.
+    '''
     self.model1 = UniformOVA(c=self.c)
     dv = cvdv(self.model1, x, y, self.folds)
     self.model0 = RidgePCA(n_components=125)
@@ -394,7 +395,6 @@ class StackModel(BaseEstimator):
     nidx = np.setdiff1d(np.arange(y.shape[0]), idx)
     self.yrate = y[nidx].mean(0)
     
-    #addition
     self.posdv = np.zeros(dv.shape[1])
     self.negdv = np.zeros(dv.shape[1])
     self.posdv0 = np.zeros(dv.shape[1])
@@ -412,7 +412,6 @@ class StackModel(BaseEstimator):
         self.posdv[k] = max_dv
         self.posdv0[k] = max_dv0
       self.negdv[k] = np.median(dvout[yout[:, k]==0, k])
-    #end addition
     
     self.count_model = Ridge()
     self.count_model.fit(x[nidx], y[nidx].sum(1))
@@ -460,6 +459,10 @@ class StackModel(BaseEstimator):
     return dv2
 
   def dv2ftr(self, dv, dv0, x, y):
+    '''
+    Computes the features and labels for use in training the StackModel.
+    StackModel is trained on a subset of the data.
+    '''
     f = self.dv2f(dv, dv0, x)
     yf = y.ravel()
     pos_idx = np.where(yf==1)[0]
@@ -469,6 +472,13 @@ class StackModel(BaseEstimator):
     return f[idx], yf[idx]
 
   def dv2f(self, dv, dv0, x):
+    '''
+    Computes the features used in the StackModel. These are:
+    the decision value (DV) and max DV by row under the UniformOVA
+    model; the DV and max DV by row under RidgePCA model; the 
+    median dv for positive and negative instances of each class;
+    the estimated counts under the count model. 
+    '''
     rowmax = dv.max(1)
     row_dv = (dv.transpose() - rowmax).transpose()
     rowmax0 = dv0.max(1)
