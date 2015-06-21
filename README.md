@@ -8,7 +8,7 @@ This task involves predicting topics or categories for each article
 in a corpus of about 100,000 Greek language news articles. 
 Each document belongs to at least one category, but can belong to several. 
 
-### Data
+#### Data
 This is a multilabel-classification task. 
 Each document belongs to at least one category, 
 and about 1/3 of the documents are in multiple categories. 
@@ -19,12 +19,12 @@ There are 99780 total articles, of which the first 64857 form the training set,
 while the remaining 34923 form the test set. 
 
 
-### Evaluation Metric
+#### Evaluation Metric
 The evaluation metric for this task is mean F1-score, 
 which is explained [here](https://www.kaggle.com/c/wise-2014/details/evaluation). 
 This is a per-example, or row-wise, F1-score.
 
-### Models
+#### Models
 The models included here are:
 * UniformOVA - This model fits a linear support vector classifier to each class, 
 in a one-versus-all style. Classification is by a global threshold on the decision values, 
